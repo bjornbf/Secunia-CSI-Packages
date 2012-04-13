@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<packageContent>
+
+	<packageName><![CDATA[Update Sun Java JRE 1.6.x to 6u31 (x86 for 64-bit systems)]]></packageName>
+	<description><![CDATA[]]></description>
+	<reference><![CDATA[]]></reference>
+	<execute><![CDATA[var Title = "Custom Update Sun Java JRE 1.6.x - 4";
+var GUID = "88961f9a-2a03-4018-b43b-f5094d81c4d5";
+var userSpecficParams = "ADDLOCAL=ALL JAVAUPDATE=0 AUTOUPDATECHECK=0 JU=0 REBOOT=ReallySupress /qn";
+
+// NOTE - keep the GUID and title variables already set up in the default script.
+
+// Note - this assumes that the file order of the included files, whether they be // local files or dynamically downloaded files, is as follows:
+
+//Data1.cab
+//jre1.6.0_31.msi
+
+function main() {
+
+	if ( !GUID ) {
+		server.logMessage("No GUID supplied for package " + Title);
+		return 1;
+	}
+
+	server.logMessage("Running package " + Title);
+	server.logMessage("GUID : " + GUID);
+
+	// There must be at least 3 embedded files (this script is the first one)
+	var numFiles = server.numberOfFiles;
+	if ( numFiles < 3 ) {
+		server.logMessage("Incorrect number of embedded files. Aborting.");
+		return 1;
+	}
+
+	var filename, shell, sys, temp, tempPath, outdir; // Declare variables we use below
+
+	// Set up the directory the files will be extracted to and run from
+	shell = new ActiveXObject( "WScript.Shell" );
+	temp = shell.ExpandEnvironmentStrings( "%TEMP%" );
+	sys = new ActiveXObject( "Scripting.FileSystemObject" );
+	tempPath = temp + "\\\\" + GUID;
+	try {
+		if ( sys.FolderExists( tempPath ) ) {
+			outdir = sys.GetFolder( tempPath );
+		} else {
+			outdir = sys.CreateFolder( tempPath );
+		}
+	} catch ( ex ) {
+		server.logMessage( "Exception with get/create temporary directory " + ex.number + " : " + ex.message );
+		return 1;
+	}
+
+	// First, extract all the files into the outdir created/found above and get the full path names into
+	// an array that we can reference later
+	var extractedFileNamesWithPath = [];
+	for ( var i=1; i <= 2; i++ ) {
+		filename = server.getFilename( i );
+		if ( !filename ) {
+			server.logMessage( "Cannot read filename: " + filename + "  from file. Corrupted file." );
+			return 1;
+		}
+
+		tempFileWithPath = outdir.Path + "\\\\" + filename;
+
+		// Check integrity of file
+		sha1Sum = server.getSHA1Sum( i ); // file at index i
+		if ( !sha1Sum ) {
+			server.logMessage( "Cannot read SHA1SUM from file. Corrupted file." );
+			return 1;
+		}
+		try {
+			server.extractFile( i, tempFileWithPath ); // file at index i
+		} catch ( ex ) {
+			server.logMessage( "Error when extracting file " + ex.number + " : " + ex.message + "File may already exist." );
+		}
+		sha1SumCalc = server.getSHA1Sum( tempFileWithPath );
+		if ( sha1SumCalc !== sha1Sum ) {
+			server.logMessage( "Wrong SHA1SUM. Corrupted file." );
+			return 1;
+		}
+
+		// File is ok - store the tempFileWithPath into our array
+		extractedFileNamesWithPath[ extractedFileNamesWithPath.length ] = tempFileWithPath;
+	}
+
+	// We need to the appropriate command on the 5 extracted files.  i.e. if they were called: File0, File1, ..., File4
+	//
+
+	 var commandLine = "%WINDIR%\\SYSTEM32\\msiexec.exe /package " + extractedFileNamesWithPath[1] + " " + userSpecficParams;
+	server.logMessage("Executing: " + commandLine);
+	var exec = shell.Exec( commandLine );
+
+	wait( exec, 3 * 3600 * 1000 ); // timeout in 3 hours
+
+	if ( !exec.Status ) {
+		server.logMessage("Executed " + commandLine + ", but failed to complete. Abandoning.");
+		exec.Terminate();
+		wait( exec, 300 * 1000 ); // timeout in 5 mins
+		sys.DeleteFolder( outdir.Path );
+		return 1;
+	} else {
+		server.logMessage("Executed " + commandLine + ", return status is " + exec.ExitCode);
+		shell.RegWrite( "HKLM\\Software\\Secunia\\Updates\\Installed\\" + GUID + "\\", Title );
+		sys.DeleteFolder( outdir.Path );
+	}
+}
+
+// The function waits for the command to complete its execution or timeout
+function wait( execObject, timeout ) {
+    var start = ( new Date() ).valueOf();
+    while ( 0 === execObject.Status && (new Date()).valueOf()-start < timeout ) { 		server.sleep(1000);     } }   main();]]></execute>
+	<source><![CDATA[JScript]]></source>
+	<packageFiles>
+		<packageFile><![CDATA[X:\Secunia CSI packages\oracle\java\jre1.6.0_31\Data1.cab]]></packageFile>
+		<packageFile><![CDATA[X:\Secunia CSI packages\oracle\java\jre1.6.0_31\jre1.6.0_31.msi]]></packageFile>
+	</packageFiles>
+
+	<applicabilityPaths>
+		<alwaysInstallable><![CDATA[false]]></alwaysInstallable>
+	</applicabilityPaths>
+
+	<systemApplicability><![CDATA[only64]]></systemApplicability>
+	<javaSpecial><![CDATA[false]]></javaSpecial>
+	<rebootRequired><![CDATA[false]]></rebootRequired>
+	<onlyLanguages><![CDATA[false]]></onlyLanguages>
+	<doNotIncludePaths><![CDATA[true]]></doNotIncludePaths>
+
+</packageContent>
